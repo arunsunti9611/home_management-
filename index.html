@@ -37,6 +37,17 @@
   </header>
 
   <main class="container">
+    <section class="backup-actions card">
+      <div class="export-row">
+        <h2>Data Backup</h2>
+        <div>
+          <button id="export-backup-excel" class="secondary-button">Export Backup Excel</button>
+          <button id="import-backup-excel" class="secondary-button">Import Backup Excel</button>
+          <input id="import-backup-input" type="file" accept=".csv,.xls" style="display:none" />
+        </div>
+      </div>
+      <p class="muted">Use Export Backup Excel to save all entered data in a CSV file that opens in Excel. Use Import Backup Excel to restore the same data file.</p>
+    </section>
     <section class="summary-grid" aria-label="Dashboard summary">
       <article class="card">
         <h2>Total Bills</h2>

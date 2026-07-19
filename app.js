@@ -69,6 +69,9 @@ const selectors = {
   exportLoanPdfBtn: document.getElementById('export-loan-pdf'),
   exportReportExcelBtn: document.getElementById('export-report-excel'),
   exportReportPdfBtn: document.getElementById('export-report-pdf'),
+  exportBackupExcelBtn: document.getElementById('export-backup-excel'),
+  importBackupExcelBtn: document.getElementById('import-backup-excel'),
+  importBackupInput: document.getElementById('import-backup-input'),
 };
 
 const loadState = () => {
@@ -534,7 +537,206 @@ const escapeHtml = (value) => {
 
 const exportCsv = (filename, rows) => {
   const csvData = rows.map((row) => row.map(escapeCsvValue).join(',')).join('\r\n');
-  downloadFile(filename, `\uFEFF${csvData}`, 'text/csv;charset=utf-8;');
+  downloadFile(filename, `\uFEFF${csvData}`, 'application/vnd.ms-excel');
+};
+
+const buildBackupSections = () => {
+  const sections = [];
+
+  const buildSection = (sectionName, rows) => {
+    sections.push([`#SECTION ${sectionName}`]);
+    sections.push(rows[0]);
+    rows.slice(1).forEach((row) => sections.push(row));
+    sections.push([]);
+  };
+
+  const billRows = [
+    ['id', 'name', 'category', 'repeat', 'amount', 'plannedDate', 'completedDate', 'status', 'incomeSource', 'imageName', 'image', 'remarks'],
+    ...state.bills.map((bill) => [
+      bill.id,
+      bill.name,
+      bill.category,
+      bill.repeat,
+      bill.amount,
+      bill.plannedDate,
+      bill.completedDate,
+      bill.status,
+      bill.incomeSource,
+      bill.imageName,
+      bill.image,
+      bill.remarks,
+    ]),
+  ];
+
+  const incomeRows = [
+    ['id', 'name', 'amount', 'period', 'entryDate'],
+    ...state.incomes.map((income) => [income.id, income.name, income.amount, income.period, income.entryDate]),
+  ];
+
+  const investmentRows = [
+    ['id', 'name', 'target', 'monthly', 'notes'],
+    ...state.investments.map((investment) => [investment.id, investment.name, investment.target, investment.monthly, investment.notes]),
+  ];
+
+  const assessmentRows = [
+    ['id', 'name', 'dueDate', 'status', 'notes'],
+    ...state.assessments.map((assessment) => [assessment.id, assessment.name, assessment.dueDate, assessment.status, assessment.notes]),
+  ];
+
+  buildSection('bills', billRows);
+  buildSection('incomes', incomeRows);
+  buildSection('investments', investmentRows);
+  buildSection('assessments', assessmentRows);
+  return sections;
+};
+
+const exportBackupExcel = () => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const rows = buildBackupSections();
+  exportCsv(`home_management_backup_${timestamp}.xls`, rows);
+};
+
+const parseCsvLine = (line) => {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current);
+  return values;
+};
+
+const parseBackupCsv = (text) => {
+  const lines = text.split(/\r?\n/);
+  const result = {
+    bills: [],
+    incomes: [],
+    investments: [],
+    assessments: [],
+  };
+
+  let currentSection = null;
+  let headers = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    if (line.startsWith('#SECTION ')) {
+      currentSection = line.slice(9).trim();
+      headers = null;
+      continue;
+    }
+    if (!currentSection) {
+      continue;
+    }
+
+    const values = parseCsvLine(rawLine);
+    if (!headers) {
+      headers = values;
+      continue;
+    }
+
+    const item = values.reduce((obj, value, index) => {
+      obj[headers[index]] = value;
+      return obj;
+    }, {});
+
+    if (currentSection === 'bills') {
+      result.bills.push({
+        id: Number(item.id) || Date.now(),
+        name: item.name || '',
+        category: item.category || '',
+        repeat: item.repeat || '',
+        amount: Number(item.amount) || 0,
+        plannedDate: item.plannedDate || '',
+        completedDate: item.completedDate || '',
+        status: item.status || '',
+        incomeSource: item.incomeSource || '',
+        imageName: item.imageName || '',
+        image: item.image || '',
+        remarks: item.remarks || '',
+      });
+    }
+    if (currentSection === 'incomes') {
+      result.incomes.push({
+        id: Number(item.id) || Date.now(),
+        name: item.name || '',
+        amount: Number(item.amount) || 0,
+        period: item.period || '',
+        entryDate: item.entryDate || '',
+      });
+    }
+    if (currentSection === 'investments') {
+      result.investments.push({
+        id: Number(item.id) || Date.now(),
+        name: item.name || '',
+        target: Number(item.target) || 0,
+        monthly: Number(item.monthly) || 0,
+        notes: item.notes || '',
+      });
+    }
+    if (currentSection === 'assessments') {
+      result.assessments.push({
+        id: Number(item.id) || Date.now(),
+        name: item.name || '',
+        dueDate: item.dueDate || '',
+        status: item.status || '',
+        notes: item.notes || '',
+      });
+    }
+  }
+
+  return result;
+};
+
+const handleImportBackup = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = parseBackupCsv(reader.result);
+      state.bills = imported.bills;
+      state.incomes = imported.incomes;
+      state.investments = imported.investments;
+      state.assessments = imported.assessments;
+      saveState();
+      updateAllFilterDropdowns();
+      renderAll();
+      selectors.importBackupInput.value = '';
+      alert('Backup imported successfully. Your entered data has been restored.');
+    } catch (error) {
+      console.error('Import failed', error);
+      alert('Unable to import backup. Please select a valid Excel-compatible CSV backup file.');
+    }
+  };
+  reader.onerror = () => {
+    alert('Failed to read backup file.');
+  };
+  reader.readAsText(file);
+};
+
+const requestImportBackup = () => {
+  selectors.importBackupInput.click();
 };
 
 const getActiveTabId = () => document.querySelector('.tab-button.active')?.dataset.tab || 'bills';
@@ -1728,6 +1930,9 @@ const initialize = () => {
   selectors.exportLoanPdfBtn.addEventListener('click', exportLoanPdf);
   selectors.exportReportExcelBtn.addEventListener('click', exportReportCsv);
   selectors.exportReportPdfBtn.addEventListener('click', exportReportPdf);
+  selectors.exportBackupExcelBtn.addEventListener('click', exportBackupExcel);
+  selectors.importBackupExcelBtn.addEventListener('click', requestImportBackup);
+  selectors.importBackupInput.addEventListener('change', handleImportBackup);
   renderAll();
 };
 
