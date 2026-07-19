@@ -7,8 +7,18 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="login-overlay" class="login-overlay" aria-hidden="true">
+    <div class="login-box" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <h2 id="login-title">Sign in</h2>
+      <input id="login-password" type="password" placeholder="Password" aria-label="Password" />
+      <div class="login-actions">
+        <button id="login-submit" class="primary-button">Sign in</button>
+      </div>
+      <div id="login-message" class="muted" aria-live="polite"></div>
+    </div>
+  </div>
   <header class="topbar">
-    <div class="header-top">
+      <div class="header-top">
       <div class="title-block">
         <h1>Home Management</h1>
       </div>
@@ -21,6 +31,7 @@
         <button class="tab-button" data-tab="loans"><span class="tab-icon">💳</span><span class="tab-label">Loans</span></button>
         <button class="tab-button" data-tab="reports"><span class="tab-icon">📊</span><span class="tab-label">Reports</span></button>
       </nav>
+      <button id="logout-button" class="action-button logout-button" aria-hidden="true">Logout</button>
       <div id="mobile-tab-menu" class="mobile-tab-menu" aria-hidden="true"></div>
     </div>
   </header>

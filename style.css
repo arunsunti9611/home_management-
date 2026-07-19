@@ -21,6 +21,51 @@ body {
   background: linear-gradient(180deg, #e7f0ff 0%, #f4f8fb 100%);
 }
 
+/* Login overlay */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 20, 40, 0.45);
+  z-index: 120;
+}
+
+.login-overlay[aria-hidden="true"] {
+  display: none;
+}
+
+.login-box {
+  width: min(420px, calc(100% - 48px));
+  background: rgba(255,255,255,0.98);
+  border-radius: 12px;
+  padding: 1.25rem 1.25rem 1rem;
+  box-shadow: 0 24px 60px rgba(15,23,42,0.12);
+}
+
+.login-box h2 {
+  margin: 0 0 0.25rem;
+}
+
+.login-box .muted {
+  color: #475569;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+#login-password {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,0.18);
+  margin-bottom: 0.6rem;
+}
+
+.login-actions { display:flex; justify-content:flex-end; gap:0.5rem }
+
+#login-message { margin-top:0.6rem; height:1.1rem }
+
 .topbar {
   padding: 1rem 1.25rem;
   background: transparent;
@@ -595,6 +640,23 @@ img.bill-image {
   .header-tabs .tab-button[data-tab="home"] .tab-icon {
     margin-right: 0;
     font-size: 1.05rem;
+  }
+}
+
+/* Logout button style */
+.logout-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  font-weight: 700;
+  margin-left: 0.6rem;
+}
+
+@media (max-width: 600px) {
+  .logout-button {
+    display: none; /* hide on mobile; login modal provides access */
   }
 }
 

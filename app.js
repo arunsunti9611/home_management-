@@ -119,6 +119,200 @@ const formatMoneyNoPrecision = (value) => {
   return `Rs${amount.toLocaleString('en-IN')}`;
 };
 
+/* Authentication & inactivity (dynamic password) */
+const AUTH_KEY = 'homeManagementAuth';
+const DRAFT_KEY = 'homeManagementDraft';
+const AUTH_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+let inactivityTimer = null;
+let isAppInitialized = false;
+
+const computeDynamicPassword = (dateObj = new Date()) => {
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(dateObj.getFullYear());
+  const hh = String(dateObj.getHours()).padStart(2, '0');
+  const min = String(dateObj.getMinutes()).padStart(2, '0');
+  return `laxmidevi${dd}${mm}${yyyy}${hh}${min}`;
+};
+
+const isAuthenticated = () => sessionStorage.getItem(AUTH_KEY) === 'true';
+const setAuthenticated = (val) => {
+  if (val) sessionStorage.setItem(AUTH_KEY, 'true');
+  else sessionStorage.removeItem(AUTH_KEY);
+};
+
+function updateAuthUI() {
+  const btn = document.getElementById('logout-button');
+  if (!btn) return;
+  btn.style.display = isAuthenticated() ? 'inline-flex' : 'none';
+}
+
+const showLoginModal = () => {
+  const overlay = document.getElementById('login-overlay');
+  const msg = document.getElementById('login-message');
+  if (!overlay) return;
+  overlay.setAttribute('aria-hidden', 'false');
+  const pwd = document.getElementById('login-password');
+  if (pwd) {
+    pwd.value = '';
+    pwd.focus();
+  }
+  if (msg) msg.textContent = '';
+};
+
+const hideLoginModal = () => {
+  const overlay = document.getElementById('login-overlay');
+  if (!overlay) return;
+  overlay.setAttribute('aria-hidden', 'true');
+};
+
+const saveDraft = () => {
+  try {
+    const draft = {
+      billForm: selectors.billForm ? Object.fromEntries(new FormData(selectors.billForm)) : {},
+      incomeForm: selectors.incomeForm ? Object.fromEntries(new FormData(selectors.incomeForm)) : {},
+      investmentForm: selectors.investmentForm ? Object.fromEntries(new FormData(selectors.investmentForm)) : {},
+      assessmentForm: selectors.assessmentForm ? Object.fromEntries(new FormData(selectors.assessmentForm)) : {},
+      timestamp: Date.now(),
+      state,
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch (e) {
+    console.error('Unable to save draft', e);
+  }
+};
+
+const clearDraft = () => localStorage.removeItem(DRAFT_KEY);
+
+const restoreDraftIfAny = () => {
+  const raw = localStorage.getItem(DRAFT_KEY);
+  if (!raw) return false;
+  try {
+    const draft = JSON.parse(raw);
+    const banner = document.createElement('div');
+    banner.className = 'card';
+    banner.style.marginBottom = '1rem';
+    banner.innerHTML = `<strong>Draft found</strong> — <button id="restore-draft" class="secondary-button">Restore</button> <button id="clear-draft" class="secondary-button">Clear</button>`;
+    const container = document.querySelector('.container');
+    if (container) container.insertBefore(banner, container.firstChild);
+    document.getElementById('restore-draft').addEventListener('click', () => {
+      if (draft.billForm && selectors.billForm) {
+        Object.entries(draft.billForm).forEach(([k, v]) => {
+          const el = selectors.billForm.elements[k];
+          if (el) el.value = v;
+        });
+      }
+      if (draft.incomeForm && selectors.incomeForm) {
+        Object.entries(draft.incomeForm).forEach(([k, v]) => {
+          const el = selectors.incomeForm.elements[k];
+          if (el) el.value = v;
+        });
+      }
+      if (draft.investmentForm && selectors.investmentForm) {
+        Object.entries(draft.investmentForm).forEach(([k, v]) => {
+          const el = selectors.investmentForm.elements[k];
+          if (el) el.value = v;
+        });
+      }
+      if (draft.assessmentForm && selectors.assessmentForm) {
+        Object.entries(draft.assessmentForm).forEach(([k, v]) => {
+          const el = selectors.assessmentForm.elements[k];
+          if (el) el.value = v;
+        });
+      }
+      // restore state arrays
+      if (draft.state) {
+        Object.assign(state, draft.state);
+        saveState();
+        renderAll();
+      }
+      banner.remove();
+      clearDraft();
+    });
+    document.getElementById('clear-draft').addEventListener('click', () => {
+      clearDraft();
+      banner.remove();
+    });
+    return true;
+  } catch (e) {
+    console.error('Unable to restore draft', e);
+    return false;
+  }
+};
+
+const performLogout = (auto = false) => {
+  // Save draft then clear auth and show login
+  saveDraft();
+  setAuthenticated(false);
+  clearInactivityTimer();
+  showLoginModal();
+  if (auto) console.info('Logged out due to inactivity');
+  updateAuthUI();
+};
+
+const clearInactivityTimer = () => {
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = null;
+  }
+};
+
+const startInactivityTimer = () => {
+  clearInactivityTimer();
+  inactivityTimer = setTimeout(() => {
+    performLogout(true);
+  }, AUTH_TIMEOUT_MS);
+};
+
+const resetInactivityTimer = () => {
+  if (!isAuthenticated()) return;
+  startInactivityTimer();
+};
+
+// attach activity listeners
+['click', 'mousemove', 'keydown', 'touchstart'].forEach((ev) => {
+  document.addEventListener(ev, () => {
+    if (isAuthenticated()) resetInactivityTimer();
+  }, { passive: true });
+});
+
+// login handling
+const handleLoginAttempt = () => {
+  const pwdEl = document.getElementById('login-password');
+  const msg = document.getElementById('login-message');
+  if (!pwdEl) return;
+  const provided = pwdEl.value.trim();
+  const expected = computeDynamicPassword(new Date());
+  if (provided === expected) {
+    setAuthenticated(true);
+    hideLoginModal();
+    updateAuthUI();
+    // initialize app once authenticated
+    initialize();
+    startInactivityTimer();
+    restoreDraftIfAny();
+    return;
+  }
+  if (msg) msg.textContent = 'Invalid password.';
+};
+
+// wire login button and Enter key
+const loginBtn = document.getElementById('login-submit');
+const loginPwd = document.getElementById('login-password');
+if (loginBtn) loginBtn.addEventListener('click', handleLoginAttempt);
+if (loginPwd) loginPwd.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLoginAttempt(); });
+
+// wire logout button
+const logoutBtnEl = document.getElementById('logout-button');
+if (logoutBtnEl) {
+  logoutBtnEl.addEventListener('click', () => {
+    performLogout(false);
+  });
+}
+
+// ensure UI reflects auth state on load
+updateAuthUI();
+
 const getImageFormatFromDataUrl = (dataUrl) => {
   const match = /^data:image\/(\w+);base64,/.exec(dataUrl);
   return match ? match[1].toUpperCase() : 'PNG';
@@ -1467,6 +1661,16 @@ const initializePeriodFilters = () => {
 };
 
 const initialize = () => {
+  if (!isAuthenticated()) {
+    showLoginModal();
+    return;
+  }
+  if (isAppInitialized) {
+    // already initialized; just reset inactivity timer
+    startInactivityTimer();
+    return;
+  }
+  isAppInitialized = true;
   loadState();
   initializePeriodFilters();
   resetBillForm();
