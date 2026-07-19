@@ -345,6 +345,15 @@ const exportCsv = (filename, rows) => {
 
 const getActiveTabId = () => document.querySelector('.tab-button.active')?.dataset.tab || 'bills';
 
+const setActiveTab = (tabId) => {
+  document.querySelectorAll('.tab-button').forEach((button) => {
+    button.classList.toggle('active', button.dataset.tab === tabId);
+  });
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === tabId);
+  });
+};
+
 const normalizeValue = (value) => String(value || '').trim().toLowerCase();
 
 const getItemFilterValue = () => {
@@ -1373,15 +1382,68 @@ const deleteAssessment = (id) => {
   renderAll();
 };
 
+const getMobileTabMenu = () => document.getElementById('mobile-tab-menu');
+
+const buildMobileTabMenu = () => {
+  const menu = getMobileTabMenu();
+  if (!menu) return;
+  const tabs = Array.from(document.querySelectorAll('.tab-button')).filter((b) => b.dataset.tab !== 'home');
+  menu.innerHTML = '';
+  tabs.forEach((b) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'mobile-menu-item';
+    item.dataset.tab = b.dataset.tab;
+    const label = b.querySelector('.tab-label')?.textContent?.trim() || b.textContent.trim();
+    item.textContent = label;
+    item.addEventListener('click', () => {
+      setActiveTab(item.dataset.tab);
+      menu.classList.remove('open');
+      menu.setAttribute('aria-hidden', 'true');
+      const homeBtn = document.querySelector('.tab-button[data-tab="home"]');
+      if (homeBtn) homeBtn.setAttribute('aria-expanded', 'false');
+      updateFilterRowVisibility(item.dataset.tab);
+      updateAllFilterDropdowns();
+      renderAll();
+    });
+    menu.appendChild(item);
+  });
+};
+
+// close mobile menu when clicking outside
+document.addEventListener('click', (e) => {
+  const menu = getMobileTabMenu();
+  if (!menu || !menu.classList.contains('open')) return;
+  const nav = document.querySelector('.header-tabs');
+  if (nav && (nav.contains(e.target) || menu.contains(e.target))) return;
+  menu.classList.remove('open');
+  menu.setAttribute('aria-hidden', 'true');
+  const homeBtn = document.querySelector('.tab-button[data-tab="home"]');
+  if (homeBtn) homeBtn.setAttribute('aria-expanded', 'false');
+});
+
 const setupTabs = () => {
   const tabButtons = document.querySelectorAll('.tab-button');
   const tabPanels = document.querySelectorAll('.tab-panel');
   tabButtons.forEach((button) => {
     button.addEventListener('click', () => {
-      tabButtons.forEach((btn) => btn.classList.remove('active'));
-      tabPanels.forEach((panel) => panel.classList.remove('active'));
-      button.classList.add('active');
       const tabId = button.dataset.tab;
+      // Home toggles the mobile tab menu (shows names)
+      if (tabId === 'home') {
+        const menu = getMobileTabMenu();
+        if (menu) {
+          const isOpen = menu.classList.toggle('open');
+          menu.setAttribute('aria-hidden', (!isOpen).toString());
+          const homeBtn = document.querySelector('.tab-button[data-tab="home"]');
+          if (homeBtn) homeBtn.setAttribute('aria-expanded', String(isOpen));
+          if (isOpen) buildMobileTabMenu();
+        }
+        // keep current active tab visually and just show menu
+        return;
+      }
+
+      setActiveTab(tabId);
+      tabPanels.forEach((panel) => panel.classList.remove('active'));
       document.getElementById(tabId).classList.add('active');
       updateFilterRowVisibility(tabId);
       updateAllFilterDropdowns();

@@ -8,25 +8,59 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar-inner">
-      <div>
-        <div class="topbar-brand">
-          <span class="owner">laxman</span>
-          <span>/</span>
-          <span class="repo-name">home-management</span>
-          <span class="repo-label">Public</span>
-        </div>
-        <p class="topbar-description">Dashboard, bills, income, investments, assessments, and loan management with a GitHub-style interface.</p>
+    <div class="header-top">
+      <div class="title-block">
+        <h1>Home Management</h1>
       </div>
-      <div class="topbar-actions">
-        <button class="secondary-button" type="button">Code</button>
-        <button class="secondary-button" type="button">Issues</button>
-        <button class="secondary-button" type="button">Pull requests</button>
-      </div>
+      <nav class="header-tabs" aria-label="Main navigation">
+        <button class="tab-button" data-tab="home" aria-expanded="false"><span class="tab-icon">🏠</span><span class="tab-label">Home</span></button>
+        <button class="tab-button active" data-tab="bills"><span class="tab-icon">🧾</span><span class="tab-label">Bills</span></button>
+        <button class="tab-button" data-tab="income"><span class="tab-icon">💰</span><span class="tab-label">Income</span></button>
+        <button class="tab-button" data-tab="investments"><span class="tab-icon">📈</span><span class="tab-label">Investments</span></button>
+        <button class="tab-button" data-tab="assets"><span class="tab-icon">🏠</span><span class="tab-label">Assets</span></button>
+        <button class="tab-button" data-tab="loans"><span class="tab-icon">💳</span><span class="tab-label">Loans</span></button>
+        <button class="tab-button" data-tab="reports"><span class="tab-icon">📊</span><span class="tab-label">Reports</span></button>
+      </nav>
+      <div id="mobile-tab-menu" class="mobile-tab-menu" aria-hidden="true"></div>
     </div>
   </header>
 
   <main class="container">
+    <section class="summary-grid" aria-label="Dashboard summary">
+      <article class="card">
+        <h2>Total Bills</h2>
+        <p id="summary-bills">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Monthly Bills</h2>
+        <p id="summary-monthly-bills">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Yearly Bills</h2>
+        <p id="summary-yearly-bills">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Income Total</h2>
+        <p id="summary-income">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Net Balance</h2>
+        <p id="summary-balance">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Monthly Income</h2>
+        <p id="summary-monthly-income">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Yearly Income</h2>
+        <p id="summary-yearly-income">₹0.00</p>
+      </article>
+      <article class="card">
+        <h2>Completed Bills</h2>
+        <p id="summary-completed">0</p>
+      </article>
+    </section>
+
     <section class="period-filter card" aria-label="Select period">
       <div class="filter-title">Filter period</div>
       <div class="field-row inline">
@@ -91,50 +125,6 @@
           <option value="assets">Assets</option>
         </select>
       </div>
-    </section>
-
-    <section class="summary-grid" aria-label="Dashboard summary">
-      <article class="card">
-        <h2>Total Bills</h2>
-        <p id="summary-bills">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Monthly Bills</h2>
-        <p id="summary-monthly-bills">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Yearly Bills</h2>
-        <p id="summary-yearly-bills">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Income Total</h2>
-        <p id="summary-income">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Net Balance</h2>
-        <p id="summary-balance">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Monthly Income</h2>
-        <p id="summary-monthly-income">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Yearly Income</h2>
-        <p id="summary-yearly-income">₹0.00</p>
-      </article>
-      <article class="card">
-        <h2>Completed Bills</h2>
-        <p id="summary-completed">0</p>
-      </article>
-    </section>
-
-    <section class="tabs">
-      <button class="tab-button active" data-tab="bills">Bills</button>
-      <button class="tab-button" data-tab="income">Income</button>
-      <button class="tab-button" data-tab="investments">Investments</button>
-      <button class="tab-button" data-tab="assets">Assets</button>
-      <button class="tab-button" data-tab="loans">Loans</button>
-      <button class="tab-button" data-tab="reports">Reports</button>
     </section>
 
     <section id="reports" class="tab-panel">
