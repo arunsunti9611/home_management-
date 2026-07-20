@@ -305,17 +305,33 @@ const loginPwd = document.getElementById('login-password');
 if (loginBtn) loginBtn.addEventListener('click', handleLoginAttempt);
 if (loginPwd) loginPwd.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLoginAttempt(); });
 
-// show/hide password toggle
-const loginToggle = document.getElementById('login-toggle');
-if (loginToggle && loginPwd) {
-  loginToggle.addEventListener('click', () => {
-    const isPassword = loginPwd.type === 'password';
-    loginPwd.type = isPassword ? 'text' : 'password';
+// show/hide password toggle (improved mobile support)
+const attachLoginToggle = () => {
+  const loginToggle = document.getElementById('login-toggle');
+  const pwdEl = document.getElementById('login-password');
+  if (!loginToggle || !pwdEl) return;
+
+  const toggleFn = (e) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    e && e.stopPropagation && e.stopPropagation();
+    const isPassword = pwdEl.type === 'password';
+    pwdEl.type = isPassword ? 'text' : 'password';
     loginToggle.textContent = isPassword ? 'Hide' : 'Show';
     loginToggle.setAttribute('aria-pressed', String(isPassword));
     loginToggle.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-    if (isPassword) loginPwd.focus();
+    if (isPassword) pwdEl.focus();
+  };
+
+  // listen for click, pointer and touch to cover mobile browsers
+  ['click', 'pointerdown', 'touchstart'].forEach((ev) => {
+    loginToggle.addEventListener(ev, toggleFn, { passive: false });
   });
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', attachLoginToggle);
+} else {
+  attachLoginToggle();
 }
 
 // wire logout button
