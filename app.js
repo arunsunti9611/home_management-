@@ -305,6 +305,19 @@ const loginPwd = document.getElementById('login-password');
 if (loginBtn) loginBtn.addEventListener('click', handleLoginAttempt);
 if (loginPwd) loginPwd.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLoginAttempt(); });
 
+// show/hide password toggle
+const loginToggle = document.getElementById('login-toggle');
+if (loginToggle && loginPwd) {
+  loginToggle.addEventListener('click', () => {
+    const isPassword = loginPwd.type === 'password';
+    loginPwd.type = isPassword ? 'text' : 'password';
+    loginToggle.textContent = isPassword ? 'Hide' : 'Show';
+    loginToggle.setAttribute('aria-pressed', String(isPassword));
+    loginToggle.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+    if (isPassword) loginPwd.focus();
+  });
+}
+
 // wire logout button
 const logoutBtnEl = document.getElementById('logout-button');
 if (logoutBtnEl) {
