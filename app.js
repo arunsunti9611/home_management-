@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'homeManagementData';
+const SYNC_ENDPOINT = '/api/state';
 
 const state = {
   bills: [],
@@ -92,6 +93,36 @@ const loadState = () => {
 
 const saveState = () => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  // attempt to sync to server in background (non-blocking)
+  if (navigator.onLine) {
+    try {
+      fetch(SYNC_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state),
+      }).catch((e) => {
+        // ignore errors; localStorage remains primary fallback
+        console.warn('Sync failed', e);
+      });
+    } catch (e) {
+      console.warn('Sync error', e);
+    }
+  }
+};
+
+const loadStateFromServer = async () => {
+  try {
+    const res = await fetch(SYNC_ENDPOINT, { cache: 'no-store' });
+    if (!res.ok) return;
+    const remote = await res.json();
+    if (remote && typeof remote === 'object' && Object.keys(remote).length) {
+      Object.assign(state, remote);
+      saveState();
+      renderAll();
+    }
+  } catch (e) {
+    console.info('Unable to load remote state', e);
+  }
 };
 
 const createBadge = (status) => {
@@ -128,6 +159,16 @@ const DRAFT_KEY = 'homeManagementDraft';
 const AUTH_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 let inactivityTimer = null;
 let isAppInitialized = false;
+let syncInterval = null;
+
+const startSyncPolling = () => {
+  if (syncInterval) clearInterval(syncInterval);
+  syncInterval = setInterval(() => {
+    if (isAuthenticated()) loadStateFromServer();
+  }, 5000);
+};
+
+const clearSyncPolling = () => { if (syncInterval) { clearInterval(syncInterval); syncInterval = null; } };
 
 const computeDynamicPassword = (dateObj = new Date()) => {
   const dd = String(dateObj.getDate()).padStart(2, '0');
@@ -248,6 +289,7 @@ const performLogout = (auto = false) => {
   saveDraft();
   setAuthenticated(false);
   clearInactivityTimer();
+  clearSyncPolling();
   showLoginModal();
   if (auto) console.info('Logged out due to inactivity');
   updateAuthUI();
@@ -292,6 +334,9 @@ const handleLoginAttempt = () => {
     updateAuthUI();
     // initialize app once authenticated
     initialize();
+    // try load shared state from server and start polling
+    loadStateFromServer();
+    startSyncPolling();
     startInactivityTimer();
     restoreDraftIfAny();
     return;
@@ -311,9 +356,13 @@ const attachLoginToggle = () => {
   const pwdEl = document.getElementById('login-password');
   if (!loginToggle || !pwdEl) return;
 
+  let lastToggleAt = 0;
   const toggleFn = (e) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     e && e.stopPropagation && e.stopPropagation();
+    const now = Date.now();
+    if (now - lastToggleAt < 300) return; // avoid duplicate events (touch + click)
+    lastToggleAt = now;
     const isPassword = pwdEl.type === 'password';
     pwdEl.type = isPassword ? 'text' : 'password';
     loginToggle.textContent = isPassword ? 'Hide' : 'Show';
@@ -322,10 +371,8 @@ const attachLoginToggle = () => {
     if (isPassword) pwdEl.focus();
   };
 
-  // listen for click, pointer and touch to cover mobile browsers
-  ['click', 'pointerdown', 'touchstart'].forEach((ev) => {
-    loginToggle.addEventListener(ev, toggleFn, { passive: false });
-  });
+  // use single 'click' listener to avoid double-toggle on mobile (touchstart + click)
+  loginToggle.addEventListener('click', toggleFn);
 };
 
 if (document.readyState === 'loading') {
