@@ -294,6 +294,26 @@
                 <option>Subscription</option>
                 <option>Other</option>
               </select>
+              <p id="loan-category-hint" class="loan-category-hint muted" style="display:none;">Loan detected in bill name — category set to <strong>Loan</strong>. Fill loan details below.</p>
+            </div>
+            <div id="loan-fields-container" class="loan-fields-wrapper full-width" style="display: none;">
+              <div class="loan-fields-header">Loan Details — Total, Interest &amp; Tenure</div>
+              <div class="loan-fields-grid">
+                <div class="field-row">
+                  <label for="loan-total-amount">Total Loan Amount (₹)</label>
+                  <input id="loan-total-amount" name="loanTotalAmount" type="number" min="0" step="0.01" placeholder="e.g. 300000" />
+                </div>
+                <div class="field-row">
+                  <label for="loan-interest-rate">Interest Rate (% p.a.)</label>
+                  <input id="loan-interest-rate" name="loanInterestRate" type="number" min="0" step="0.01" placeholder="e.g. 12" />
+                </div>
+                <div class="field-row">
+                  <label for="loan-target-months">Target Months (Tenure)</label>
+                  <input id="loan-target-months" name="loanTargetMonths" type="number" min="1" step="1" placeholder="e.g. 24" />
+                </div>
+              </div>
+              <div id="loan-calc-preview" class="loan-calc-preview" style="display:none;"></div>
+              <div id="loan-progress-summary" class="loan-progress-summary" style="display:none;"></div>
             </div>
             <div class="field-row">
               <label for="bill-repeat">Repeat</label>
@@ -366,6 +386,8 @@
                   <th>Completed</th>
                   <th>Status</th>
                   <th>Income Source</th>
+                  <th>Rem. Amount</th>
+                  <th>Rem. Months</th>
                   <th>Image</th>
                   <th>Remarks</th>
                   <th>Actions</th>
@@ -391,6 +413,8 @@
                   <th>Completed</th>
                   <th>Status</th>
                   <th>Income Source</th>
+                  <th>Rem. Amount</th>
+                  <th>Rem. Months</th>
                   <th>Image</th>
                   <th>Remarks</th>
                   <th>Actions</th>
@@ -466,13 +490,18 @@
               <input id="investment-name" name="investmentName" required />
             </div>
             <div class="field-row">
-              <label for="investment-target">Target Amount</label>
+              <label for="investment-target">Target Amount (₹)</label>
               <input id="investment-target" name="investmentTarget" type="number" min="0" step="0.01" required />
             </div>
             <div class="field-row">
-              <label for="investment-monthly">Monthly Contribution</label>
+              <label for="investment-contributed">Amount Saved So Far (₹)</label>
+              <input id="investment-contributed" name="investmentContributed" type="number" min="0" step="0.01" value="0" />
+            </div>
+            <div class="field-row">
+              <label for="investment-monthly">Monthly Contribution (₹)</label>
               <input id="investment-monthly" name="investmentMonthly" type="number" min="0" step="0.01" required />
             </div>
+            <div id="investment-calc-preview" class="loan-calc-preview" style="display:none;"></div>
             <div class="field-row full-width">
               <label for="investment-notes">Notes</label>
               <textarea id="investment-notes" name="investmentNotes" rows="3"></textarea>
@@ -495,7 +524,10 @@
                 <tr>
                   <th>Plan</th>
               <th>Target</th>
+              <th>Saved</th>
+              <th>Remaining</th>
               <th>Monthly</th>
+              <th>Rem. Months</th>
               <th>Notes</th>
               <th>Actions</th>
                 </tr>
@@ -518,9 +550,18 @@
               <input id="assessment-name" name="assessmentName" required />
             </div>
             <div class="field-row">
+              <label for="assessment-target">Target Amount (₹)</label>
+              <input id="assessment-target" name="assessmentTarget" type="number" min="0" step="0.01" value="0" />
+            </div>
+            <div class="field-row">
+              <label for="assessment-saved">Amount Saved So Far (₹)</label>
+              <input id="assessment-saved" name="assessmentSaved" type="number" min="0" step="0.01" value="0" />
+            </div>
+            <div class="field-row">
               <label for="assessment-due">Target Date</label>
               <input id="assessment-due" name="assessmentDue" type="date" required />
             </div>
+            <div id="assessment-calc-preview" class="loan-calc-preview" style="display:none;"></div>
             <div class="field-row">
               <label for="assessment-status">Status</label>
               <select id="assessment-status" name="assessmentStatus">
@@ -573,15 +614,37 @@
             <button id="export-loan-pdf" class="secondary-button">Export Loan PDF</button>
           </div>
         </div>
-        <p>Loans are derived from bills categorized as <strong>Loan</strong>.</p>
+        <p class="muted">Loans are derived from bills categorized as <strong>Loan</strong>. All bills under the same loan name are automatically grouped together into one row.</p>
+        <div class="summary-grid loan-summary-grid">
+          <article class="card">
+            <h2>Active Loans</h2>
+            <p id="loan-summary-total-count">0</p>
+          </article>
+          <article class="card">
+            <h2>Total Loan Amount</h2>
+            <p id="loan-summary-total-amount">₹0.00</p>
+          </article>
+          <article class="card">
+            <h2>Total Paid Amount</h2>
+            <p id="loan-summary-total-paid">₹0.00</p>
+          </article>
+          <article class="card">
+            <h2>Remaining Balance</h2>
+            <p id="loan-summary-total-remaining">₹0.00</p>
+          </article>
+        </div>
         <div class="table-wrapper">
-          <table>
+          <table class="loan-grouped-table">
             <thead>
               <tr>
+                <th style="width: 40px;"></th>
                 <th>Loan Name</th>
-                <th>Amount</th>
-                <th>Planned Date</th>
-                <th>Completed Date</th>
+                <th>Total Amount</th>
+                <th>Interest Rate</th>
+                <th>Target Months</th>
+                <th>Paid Amount</th>
+                <th>Remaining Amount</th>
+                <th>Remaining Months</th>
                 <th>Status</th>
               </tr>
             </thead>

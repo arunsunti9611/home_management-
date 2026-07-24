@@ -1,5 +1,17 @@
 const STORAGE_KEY = 'homeManagementData';
-const SYNC_ENDPOINT = '/api/state';
+
+// Replace this with your actual Render service URL after deploying to Render (e.g. 'https://my-home-app.onrender.com')
+const RENDER_BACKEND_URL = ''; 
+
+const getSyncEndpoint = () => {
+  const customUrl = RENDER_BACKEND_URL || localStorage.getItem('render_backend_url') || '';
+  if (customUrl) {
+    return `${customUrl.replace(/\/$/, '')}/api/state`;
+  }
+  return '/api/state';
+};
+
+const SYNC_ENDPOINT = getSyncEndpoint();
 
 const state = {
   bills: [],
@@ -73,7 +85,18 @@ const selectors = {
   exportBackupExcelBtn: document.getElementById('export-backup-excel'),
   importBackupExcelBtn: document.getElementById('import-backup-excel'),
   importBackupInput: document.getElementById('import-backup-input'),
+  loanFieldsContainer: document.getElementById('loan-fields-container'),
+  loanTotalAmount: document.getElementById('loan-total-amount'),
+  loanInterestRate: document.getElementById('loan-interest-rate'),
+  loanTargetMonths: document.getElementById('loan-target-months'),
+  loanCalcPreview: document.getElementById('loan-calc-preview'),
+  loanSummaryTotalCount: document.getElementById('loan-summary-total-count'),
+  loanSummaryTotalAmount: document.getElementById('loan-summary-total-amount'),
+  loanSummaryTotalPaid: document.getElementById('loan-summary-total-paid'),
+  loanSummaryTotalRemaining: document.getElementById('loan-summary-total-remaining'),
 };
+
+const expandedLoanNames = new Set();
 
 const loadState = () => {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -151,6 +174,65 @@ const formatMoney = (value) => {
 const formatMoneyNoPrecision = (value) => {
   const amount = Math.round(Number(value || 0));
   return `Rs${amount.toLocaleString('en-IN')}`;
+};
+
+const toggleLoanFieldsVisibility = () => {
+  const form = selectors.billForm;
+  if (!form || !selectors.loanFieldsContainer) return;
+  const isLoan = form.billCategory.value === 'Loan';
+  selectors.loanFieldsContainer.style.display = isLoan ? 'block' : 'none';
+  if (isLoan) {
+    updateLoanCalcPreview();
+  }
+};
+
+const updateLoanCalcPreview = () => {
+  const form = selectors.billForm;
+  if (!form || !selectors.loanCalcPreview) return;
+  const principal = Number(form.loanTotalAmount?.value || 0);
+  const rate = Number(form.loanInterestRate?.value || 0);
+  const months = Number(form.loanTargetMonths?.value || 0);
+  const billAmt = Number(form.billAmount?.value || 0);
+
+  if (principal > 0 || months > 0 || rate > 0) {
+    selectors.loanCalcPreview.style.display = 'block';
+    let interest = 0;
+    let totalRepayable = principal;
+    if (principal > 0 && rate > 0 && months > 0) {
+      interest = (principal * rate * (months / 12)) / 100;
+      totalRepayable = principal + interest;
+    } else if (principal <= 0 && billAmt > 0 && months > 0) {
+      totalRepayable = billAmt * months;
+    }
+    const estEmi = months > 0 ? totalRepayable / months : 0;
+    selectors.loanCalcPreview.innerHTML = `
+      <strong>Loan Calculation:</strong> Total Repayable: <span style="color:#2f6bf4;">${formatMoney(totalRepayable)}</span> | 
+      Est. Interest: <span style="color:#e11d48;">${formatMoney(interest)}</span> | 
+      Monthly EMI: <span style="color:#16a34a;">${formatMoney(estEmi)}</span>
+    `;
+  } else {
+    selectors.loanCalcPreview.style.display = 'none';
+  }
+};
+
+const autoFillLoanDetailsByName = (name) => {
+  const form = selectors.billForm;
+  if (!form || form.billCategory.value !== 'Loan' || !name) return;
+  const existingLoanBill = state.bills.find(
+    (b) => b.category === 'Loan' && normalizeValue(b.name) === normalizeValue(name) && (b.loanTotalAmount || b.loanTargetMonths || b.loanInterestRate)
+  );
+  if (existingLoanBill) {
+    if (existingLoanBill.loanTotalAmount && !form.loanTotalAmount.value) {
+      form.loanTotalAmount.value = existingLoanBill.loanTotalAmount;
+    }
+    if (existingLoanBill.loanInterestRate && !form.loanInterestRate.value) {
+      form.loanInterestRate.value = existingLoanBill.loanInterestRate;
+    }
+    if (existingLoanBill.loanTargetMonths && !form.loanTargetMonths.value) {
+      form.loanTargetMonths.value = existingLoanBill.loanTargetMonths;
+    }
+    updateLoanCalcPreview();
+  }
 };
 
 /* Authentication & inactivity (dynamic password) */
@@ -627,7 +709,7 @@ const buildBackupSections = () => {
   };
 
   const billRows = [
-    ['id', 'name', 'category', 'repeat', 'amount', 'plannedDate', 'completedDate', 'status', 'incomeSource', 'imageName', 'image', 'remarks'],
+    ['id', 'name', 'category', 'repeat', 'amount', 'plannedDate', 'completedDate', 'status', 'incomeSource', 'imageName', 'image', 'remarks', 'loanTotalAmount', 'loanInterestRate', 'loanTargetMonths'],
     ...state.bills.map((bill) => [
       bill.id,
       bill.name,
@@ -641,6 +723,9 @@ const buildBackupSections = () => {
       bill.imageName,
       bill.image,
       bill.remarks,
+      bill.loanTotalAmount || 0,
+      bill.loanInterestRate || 0,
+      bill.loanTargetMonths || 0,
     ]),
   ];
 
@@ -749,6 +834,9 @@ const parseBackupCsv = (text) => {
         imageName: item.imageName || '',
         image: item.image || '',
         remarks: item.remarks || '',
+        loanTotalAmount: Number(item.loanTotalAmount) || 0,
+        loanInterestRate: Number(item.loanInterestRate) || 0,
+        loanTargetMonths: Number(item.loanTargetMonths) || 0,
       });
     }
     if (currentSection === 'incomes') {
@@ -1278,42 +1366,163 @@ const exportAssessmentPdf = () => {
   doc.save(`assessment_${period.replace(/\s+/g, '_')}.pdf`);
 };
 
-const exportLoanCsv = () => {
+const getGroupedLoansData = () => {
   const loans = getFilteredLoans();
+  const groupsMap = {};
+
+  loans.forEach((bill) => {
+    const key = normalizeValue(bill.name);
+    if (!groupsMap[key]) {
+      groupsMap[key] = {
+        name: bill.name,
+        bills: [],
+        loanTotalAmount: Number(bill.loanTotalAmount || 0),
+        loanInterestRate: Number(bill.loanInterestRate || 0),
+        loanTargetMonths: Number(bill.loanTargetMonths || 0),
+      };
+    }
+    groupsMap[key].bills.push(bill);
+    if (Number(bill.loanTotalAmount || 0) > groupsMap[key].loanTotalAmount) {
+      groupsMap[key].loanTotalAmount = Number(bill.loanTotalAmount);
+    }
+    if (Number(bill.loanInterestRate || 0) > groupsMap[key].loanInterestRate) {
+      groupsMap[key].loanInterestRate = Number(bill.loanInterestRate);
+    }
+    if (Number(bill.loanTargetMonths || 0) > groupsMap[key].loanTargetMonths) {
+      groupsMap[key].loanTargetMonths = Number(bill.loanTargetMonths);
+    }
+  });
+
+  return Object.values(groupsMap).map((group) => {
+    const totalPaid = group.bills.reduce((sum, b) => (b.status === 'Completed' ? sum + Number(b.amount || 0) : sum), 0);
+    const completedCount = group.bills.filter((b) => b.status === 'Completed').length;
+    const totalBillsSum = group.bills.reduce((sum, b) => sum + Number(b.amount || 0), 0);
+
+    let maxLoanTotal = group.loanTotalAmount;
+    if (!maxLoanTotal || maxLoanTotal <= 0) {
+      maxLoanTotal = group.loanTargetMonths > 0 ? (group.bills[0]?.amount || 0) * group.loanTargetMonths : totalBillsSum;
+      if (maxLoanTotal < totalBillsSum) maxLoanTotal = totalBillsSum;
+    }
+
+    const remainingAmount = Math.max(0, maxLoanTotal - totalPaid);
+    const targetMonths = group.loanTargetMonths || group.bills.length;
+    const remainingMonths = Math.max(0, targetMonths - completedCount);
+
+    let status = 'Planned';
+    if (remainingAmount <= 0 || (completedCount >= targetMonths && targetMonths > 0)) {
+      status = 'Completed';
+    } else if (totalPaid > 0) {
+      status = 'Under Process';
+    }
+
+    return {
+      ...group,
+      totalPaid,
+      completedCount,
+      maxLoanTotal,
+      remainingAmount,
+      targetMonths,
+      remainingMonths,
+      status,
+    };
+  });
+};
+
+const exportLoanCsv = () => {
+  const groups = getGroupedLoansData();
+  const period = getSelectedPeriodLabel().replace(/\s+/g, '_');
   const rows = [
-    ['Loan Name', 'Amount', 'Planned Date', 'Completed Date', 'Status'],
-    ...loans.map((loan) => [
-      loan.name,
-      formatMoney(loan.amount),
-      loan.plannedDate || '-',
-      loan.completedDate || '-',
-      loan.status,
+    ['# LOAN SUMMARY REPORT', period],
+    [],
+    ['Loan Name', 'Total Amount', 'Interest Rate (%)', 'Target Months', 'Paid Amount', 'Remaining Amount', 'Remaining Months', 'Status'],
+    ...groups.map((g) => [
+      g.name,
+      formatMoney(g.maxLoanTotal),
+      g.loanInterestRate ? `${g.loanInterestRate}%` : '-',
+      g.targetMonths ? `${g.targetMonths}` : '-',
+      formatMoney(g.totalPaid),
+      formatMoney(g.remainingAmount),
+      `${g.remainingMonths}`,
+      g.status,
     ]),
+    [],
+    ['# ITEMIZATION / PAYMENT TRANSACTIONS'],
+    ['Loan Name', 'Installment Amount', 'Planned Date', 'Completed Date', 'Status', 'Income Source', 'Remarks'],
   ];
-  exportCsv(`loan_${getSelectedPeriodLabel().replace(/\s+/g, '_')}.csv`, rows);
+
+  groups.forEach((g) => {
+    g.bills.forEach((b) => {
+      rows.push([
+        b.name,
+        formatMoney(b.amount),
+        b.plannedDate || '-',
+        b.completedDate || '-',
+        b.status,
+        b.incomeSource || '-',
+        b.remarks || '-',
+      ]);
+    });
+  });
+
+  exportCsv(`loan_${period}.csv`, rows);
 };
 
 const exportLoanPdf = () => {
-  const loans = getFilteredLoans();
+  const groups = getGroupedLoansData();
   const period = getSelectedPeriodLabel();
   const doc = new window.jspdf.jsPDF();
   doc.setFontSize(14);
-  doc.text(`Loan Report - ${period}`, 14, 18);
-  const rows = loans.map((loan) => [
-    loan.name,
-    formatMoneyNoPrecision(loan.amount),
-    loan.plannedDate || '-',
-    loan.completedDate || '-',
-    loan.status,
+  doc.text(`Loan Summary Report - ${period}`, 14, 18);
+
+  const summaryRows = groups.map((g) => [
+    g.name,
+    formatMoneyNoPrecision(g.maxLoanTotal),
+    g.loanInterestRate ? `${g.loanInterestRate}%` : '-',
+    g.targetMonths ? `${g.targetMonths}m` : '-',
+    formatMoneyNoPrecision(g.totalPaid),
+    formatMoneyNoPrecision(g.remainingAmount),
+    `${g.remainingMonths}m`,
+    g.status,
   ]);
+
   doc.autoTable({
-    head: [[ 'Loan', 'Amt', 'Planned', 'Done', 'Status' ]],
-    body: rows,
+    head: [['Loan Name', 'Total', 'Rate', 'Tenure', 'Paid', 'Remaining', 'Rem. Mos', 'Status']],
+    body: summaryRows,
     startY: 24,
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: '#2f6bf4' },
+    styles: { fontSize: 8.5, cellPadding: 3 },
+    headStyles: { fillColor: '#2f6bf4', halign: 'center' },
     theme: 'striped',
   });
+
+  let currentY = (doc.lastAutoTable?.finalY || 24) + 12;
+
+  groups.forEach((g) => {
+    if (currentY > 260) {
+      doc.addPage();
+      currentY = 18;
+    }
+    doc.setFontSize(11);
+    doc.text(`Payment Details: ${g.name}`, 14, currentY);
+    const itemRows = g.bills.map((b) => [
+      formatMoneyNoPrecision(b.amount),
+      b.plannedDate || '-',
+      b.completedDate || '-',
+      b.status,
+      b.remarks || '-',
+    ]);
+
+    doc.autoTable({
+      head: [['Amount', 'Planned', 'Completed', 'Status', 'Remarks']],
+      body: itemRows,
+      startY: currentY + 4,
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: '#475569' },
+      theme: 'grid',
+    });
+
+    currentY = (doc.lastAutoTable?.finalY || currentY + 20) + 10;
+  });
+
   doc.save(`loan_${period.replace(/\s+/g, '_')}.pdf`);
 };
 const updateAllFilterDropdowns = () => {
@@ -1484,18 +1693,128 @@ const renderAssessments = () => {
 
 const renderLoans = () => {
   selectors.loanTableBody.innerHTML = '';
-  const loans = getFilteredLoans();
-  loans.forEach((loan) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${loan.name}</td>
-      <td>${formatMoney(loan.amount)}</td>
-      <td>${loan.plannedDate || '-'}</td>
-      <td>${loan.completedDate || '-'}</td>
-      <td></td>
+  const groups = getGroupedLoansData();
+
+  const totalCount = groups.length;
+  const totalLoanAmt = groups.reduce((s, g) => s + g.maxLoanTotal, 0);
+  const totalPaidAmt = groups.reduce((s, g) => s + g.totalPaid, 0);
+  const totalRemainingAmt = groups.reduce((s, g) => s + g.remainingAmount, 0);
+
+  if (selectors.loanSummaryTotalCount) selectors.loanSummaryTotalCount.textContent = totalCount;
+  if (selectors.loanSummaryTotalAmount) selectors.loanSummaryTotalAmount.textContent = formatMoney(totalLoanAmt);
+  if (selectors.loanSummaryTotalPaid) selectors.loanSummaryTotalPaid.textContent = formatMoney(totalPaidAmt);
+  if (selectors.loanSummaryTotalRemaining) selectors.loanSummaryTotalRemaining.textContent = formatMoney(totalRemainingAmt);
+
+  if (groups.length === 0) {
+    const emptyRow = document.createElement('tr');
+    emptyRow.innerHTML = `<td colspan="9" style="text-align:center;padding:2rem;color:#64748b;">No loan records found.</td>`;
+    selectors.loanTableBody.appendChild(emptyRow);
+    return;
+  }
+
+  groups.forEach((group) => {
+    const isExpanded = expandedLoanNames.has(normalizeValue(group.name));
+
+    // Master Row
+    const masterRow = document.createElement('tr');
+    masterRow.className = `loan-master-row ${isExpanded ? 'expanded' : ''}`;
+    masterRow.dataset.loanName = group.name;
+
+    masterRow.innerHTML = `
+      <td><button type="button" class="loan-expand-btn" aria-label="Toggle details">${isExpanded ? '▼' : '▶'}</button></td>
+      <td><strong>${escapeHtml(group.name)}</strong></td>
+      <td>${formatMoney(group.maxLoanTotal)}</td>
+      <td>${group.loanInterestRate ? group.loanInterestRate + '%' : '-'}</td>
+      <td>${group.targetMonths ? group.targetMonths + ' months' : '-'}</td>
+      <td>${formatMoney(group.totalPaid)}</td>
+      <td><span style="font-weight:700;color:${group.remainingAmount > 0 ? '#e11d48' : '#16a34a'};">${formatMoney(group.remainingAmount)}</span></td>
+      <td>${group.remainingMonths} months</td>
+      <td class="status-cell"></td>
     `;
-    row.querySelector('td:nth-child(5)').appendChild(createBadge(loan.status));
-    selectors.loanTableBody.appendChild(row);
+    masterRow.querySelector('.status-cell').appendChild(createBadge(group.status));
+
+    // Detail Row
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'loan-detail-row';
+    detailRow.style.display = isExpanded ? 'table-row' : 'none';
+
+    const detailTd = document.createElement('td');
+    detailTd.colSpan = 9;
+
+    const detailContainer = document.createElement('div');
+    detailContainer.className = 'loan-details-container';
+
+    const detailTitle = document.createElement('div');
+    detailTitle.className = 'loan-details-title';
+    detailTitle.innerHTML = `
+      <span>Payment Installment History for "${escapeHtml(group.name)}"</span>
+      <span style="font-size:0.85rem;font-weight:normal;color:#64748b;">
+        Completed: ${group.completedCount} / ${group.targetMonths} installments
+      </span>
+    `;
+
+    const detailTable = document.createElement('table');
+    detailTable.className = 'loan-detail-table';
+    detailTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>Installment</th>
+          <th>Amount</th>
+          <th>Planned Date</th>
+          <th>Completed Date</th>
+          <th>Status</th>
+          <th>Income Source</th>
+          <th>Remarks</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+
+    const detailTbody = detailTable.querySelector('tbody');
+    group.bills.forEach((bill, idx) => {
+      const bRow = document.createElement('tr');
+      bRow.innerHTML = `
+        <td>Payment #${idx + 1}</td>
+        <td>${formatMoney(bill.amount)}</td>
+        <td>${bill.plannedDate || '-'}</td>
+        <td>${bill.completedDate || '-'}</td>
+        <td class="b-status-cell"></td>
+        <td>${bill.incomeSource || '-'}</td>
+        <td>${escapeHtml(bill.remarks || '-')}</td>
+        <td class="actions"></td>
+      `;
+      bRow.querySelector('.b-status-cell').appendChild(createBadge(bill.status));
+      const actionsCell = bRow.querySelector('.actions');
+      actionsCell.appendChild(createActionButton('Edit', 'edit-btn', (e) => {
+        e.stopPropagation();
+        editBill(bill.id);
+      }));
+      actionsCell.appendChild(createActionButton('Delete', 'delete-btn', (e) => {
+        e.stopPropagation();
+        deleteBill(bill.id);
+      }));
+      detailTbody.appendChild(bRow);
+    });
+
+    detailContainer.appendChild(detailTitle);
+    detailContainer.appendChild(detailTable);
+    detailTd.appendChild(detailContainer);
+    detailRow.appendChild(detailTd);
+
+    masterRow.addEventListener('click', (e) => {
+      if (e.target.closest('button.action-button')) return;
+      const key = normalizeValue(group.name);
+      if (expandedLoanNames.has(key)) {
+        expandedLoanNames.delete(key);
+      } else {
+        expandedLoanNames.add(key);
+      }
+      renderLoans();
+    });
+
+    selectors.loanTableBody.appendChild(masterRow);
+    selectors.loanTableBody.appendChild(detailRow);
   });
 };
 
@@ -1546,12 +1865,34 @@ const getFormData = (form) => {
   return new FormData(form);
 };
 
-const resetBillForm = () => {
+const resetBillForm = (options = {}) => {
   const form = selectors.billForm;
+  const keepLoanDetails = options.keepLoanDetails ?? form.billCategory.value === 'Loan';
+  const savedLoanDetails = keepLoanDetails
+    ? {
+        totalAmount: selectors.loanTotalAmount?.value || '',
+        interestRate: selectors.loanInterestRate?.value || '',
+        targetMonths: selectors.loanTargetMonths?.value || '',
+      }
+    : null;
+
   form.reset();
   form.billId.value = '';
   form.plannedDate.value = getTodayIso();
   form.completedDate.value = '';
+
+  if (savedLoanDetails) {
+    form.billCategory.value = 'Loan';
+    if (selectors.loanTotalAmount) selectors.loanTotalAmount.value = savedLoanDetails.totalAmount;
+    if (selectors.loanInterestRate) selectors.loanInterestRate.value = savedLoanDetails.interestRate;
+    if (selectors.loanTargetMonths) selectors.loanTargetMonths.value = savedLoanDetails.targetMonths;
+  } else {
+    if (selectors.loanTotalAmount) selectors.loanTotalAmount.value = '';
+    if (selectors.loanInterestRate) selectors.loanInterestRate.value = '';
+    if (selectors.loanTargetMonths) selectors.loanTargetMonths.value = '';
+  }
+
+  toggleLoanFieldsVisibility();
   updateRepeatNameSuggestions();
   form.querySelector('button[type="submit"]').textContent = 'Add Bill';
 };
@@ -1584,6 +1925,10 @@ const populateBillForm = (bill) => {
   form.billName.value = bill.name;
   form.billCategory.value = bill.category;
   form.billRepeat.value = bill.repeat;
+  if (selectors.loanTotalAmount) selectors.loanTotalAmount.value = bill.loanTotalAmount || '';
+  if (selectors.loanInterestRate) selectors.loanInterestRate.value = bill.loanInterestRate || '';
+  if (selectors.loanTargetMonths) selectors.loanTargetMonths.value = bill.loanTargetMonths || '';
+  toggleLoanFieldsVisibility();
   updateRepeatNameSuggestions();
   form.billAmount.value = bill.amount;
   form.plannedDate.value = bill.plannedDate;
@@ -1629,6 +1974,11 @@ const handleBillForm = async (event) => {
   const editId = data.get('billId');
 
   const billNameValue = data.get('billName');
+  const categoryValue = data.get('billCategory');
+
+  const loanTotalAmount = categoryValue === 'Loan' ? Number(data.get('loanTotalAmount') || 0) : 0;
+  const loanInterestRate = categoryValue === 'Loan' ? Number(data.get('loanInterestRate') || 0) : 0;
+  const loanTargetMonths = categoryValue === 'Loan' ? Number(data.get('loanTargetMonths') || 0) : 0;
 
   const imageFile = data.get('billImage');
   let image = '';
@@ -1649,7 +1999,7 @@ const handleBillForm = async (event) => {
     const bill = state.bills.find((item) => item.id === Number(editId));
     if (bill) {
       bill.name = billNameValue;
-      bill.category = data.get('billCategory');
+      bill.category = categoryValue;
       bill.repeat = data.get('billRepeat');
       bill.amount = Number(data.get('billAmount') || 0);
       bill.plannedDate = data.get('plannedDate');
@@ -1657,6 +2007,9 @@ const handleBillForm = async (event) => {
       bill.completedDate = completedDate;
       bill.incomeSource = data.get('incomeSource');
       bill.remarks = data.get('billRemarks');
+      bill.loanTotalAmount = loanTotalAmount;
+      bill.loanInterestRate = loanInterestRate;
+      bill.loanTargetMonths = loanTargetMonths;
       if (image) {
         bill.image = image;
         bill.imageName = imageName;
@@ -1666,7 +2019,7 @@ const handleBillForm = async (event) => {
     state.bills.push({
       id: Date.now(),
       name: billNameValue,
-      category: data.get('billCategory'),
+      category: categoryValue,
       repeat: data.get('billRepeat'),
       amount: Number(data.get('billAmount') || 0),
       plannedDate: data.get('plannedDate'),
@@ -1676,13 +2029,16 @@ const handleBillForm = async (event) => {
       image,
       imageName,
       remarks: data.get('billRemarks'),
+      loanTotalAmount,
+      loanInterestRate,
+      loanTargetMonths,
     });
   }
 
   saveState();
   updateAllFilterDropdowns();
   renderAll();
-  resetBillForm();
+  resetBillForm({ keepLoanDetails: categoryValue === 'Loan' });
 };
 
 const getRepeatBillNames = () => {
@@ -1950,6 +2306,7 @@ const initialize = () => {
   }
   isAppInitialized = true;
   loadState();
+  loadStateFromServer();
   initializePeriodFilters();
   resetBillForm();
   resetIncomeForm();
@@ -1960,6 +2317,11 @@ const initialize = () => {
   selectors.incomeForm.addEventListener('submit', handleIncomeForm);
   selectors.investmentForm.addEventListener('submit', handleInvestmentForm);
   selectors.assessmentForm.addEventListener('submit', handleAssessmentForm);
+  selectors.billForm.billCategory.addEventListener('change', toggleLoanFieldsVisibility);
+  if (selectors.loanTotalAmount) selectors.loanTotalAmount.addEventListener('input', updateLoanCalcPreview);
+  if (selectors.loanInterestRate) selectors.loanInterestRate.addEventListener('input', updateLoanCalcPreview);
+  if (selectors.loanTargetMonths) selectors.loanTargetMonths.addEventListener('input', updateLoanCalcPreview);
+  selectors.billForm.billAmount.addEventListener('input', updateLoanCalcPreview);
   selectors.billForm.billRepeat.addEventListener('change', updateRepeatNameSuggestions);
   selectors.fromMonthFilter.addEventListener('change', () => {
     updateAllFilterDropdowns();
@@ -1985,14 +2347,16 @@ const initialize = () => {
     }
   });
   selectors.billName.addEventListener('blur', () => {
+    autoFillLoanDetailsByName(selectors.billName.value);
     setTimeout(hideBillNameSuggestions, 150);
   });
-  selectors.billNameSuggestions.addEventListener('click', (event) => {
+  selectors.billNameSuggestions.addEventListener('mousedown', (event) => {
     const item = event.target.closest('.suggestion-item');
-    if (item) {
-      selectors.billName.value = item.dataset.value || item.textContent;
-      hideBillNameSuggestions();
-    }
+    if (!item) return;
+    event.preventDefault();
+    selectors.billName.value = item.dataset.value || item.textContent;
+    autoFillLoanDetailsByName(selectors.billName.value);
+    hideBillNameSuggestions();
   });
   selectors.exportBillsExcelBtn.addEventListener('click', exportBillsCsv);
   selectors.exportBillsPdfBtn.addEventListener('click', exportBillsPdf);

@@ -42,8 +42,9 @@ def static_proxy(path):
 
 if __name__ == '__main__':
     import argparse
+    port_default = int(os.environ.get('PORT', 8000))
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='0.0.0.0')
-    parser.add_argument('--port', type=int, default=8000)
+    parser.add_argument('--port', type=int, default=port_default)
     args = parser.parse_args()
     app.run(host=args.host, port=args.port)
